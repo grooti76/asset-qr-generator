@@ -9,86 +9,134 @@ app = Flask(__name__)
 with open("asset.txt") as f:
     asset_codes = [line.strip() for line in f if line.strip()]
 
-HTML = """
+# ---------------- QR AUDIT APP ---------------- #
+
+QR_HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Asset QR Audit</title>
+<title>Asset QR Audit</title>
+<style>
+table { width: 100%; border-collapse: collapse; }
+td { padding: 8px; vertical-align: middle; }
+img { max-width: 120px; }
+button { padding: 5px 10px; }
+</style>
 
-    <style>
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 8px; vertical-align: middle; }
-        img { max-width: 120px; }
-        button { padding: 5px 10px; cursor: pointer; }
-    </style>
+<script>
+function toggleQR(code, rowId, btn) {
+    const cell = document.getElementById(rowId);
 
-    <script>
-        function toggleQR(code, rowId, btn) {
-            const qrCell = document.getElementById(rowId);
+    if (cell.innerHTML.trim() !== "") {
+        cell.innerHTML = "";
+        btn.innerText = "Show QR";
+        return;
+    }
 
-            // Hide QR if already visible
-            if (qrCell.innerHTML.trim() !== "") {
-                qrCell.innerHTML = "";
-                btn.innerText = "Show QR";
-                return;
-            }
-
-            // Show QR
-            fetch('/generate_qr/' + code)
-                .then(res => res.json())
-                .then(data => {
-                    qrCell.innerHTML =
-                        '<img src="data:image/png;base64,' + data.qr + '">';
-                    btn.innerText = "Hide QR";
-                });
-        }
-    </script>
+    fetch('/generate_qr/' + code)
+        .then(res => res.json())
+        .then(data => {
+            cell.innerHTML =
+                '<img src="data:image/png;base64,' + data.qr + '">';
+            btn.innerText = "Hide QR";
+        });
+}
+</script>
 </head>
-<body>
 
-<h2>Asset QR Audit List</h2>
+<body>
+<h2>Asset QR Audit</h2>
+
+<a href="/mobile">📱 Open Mobile Copy App</a>
 
 <table border="1">
 {% for code in assets %}
 <tr>
-    <!-- Asset Code -->
-    <td width="260">
-        {{ code }}
-    </td>
+    <td width="260">{{ code }}</td>
 
-    <!-- Checkbox (Audit Purpose) -->
     <td width="50" align="center">
         <input type="checkbox">
     </td>
 
-    <!-- Show / Hide Button -->
     <td width="120">
-        <button onclick="toggleQR('{{ code }}', 'qr{{ loop.index }}', this)">
+        <button onclick="toggleQR('{{ code }}','qr{{ loop.index }}',this)">
             Show QR
         </button>
     </td>
 
-    <!-- QR Display (Right Side) -->
     <td id="qr{{ loop.index }}" width="160"></td>
 </tr>
 {% endfor %}
 </table>
+</body>
+</html>
+"""
 
+# ---------------- MOBILE COPY APP ---------------- #
+
+MOBILE_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asset Copier</title>
+
+<style>
+body { font-family: Arial; padding: 10px; }
+.row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+button {
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+}
+</style>
+
+<script>
+function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        btn.innerText = "Copied ✓";
+        setTimeout(() => btn.innerText = "Copy", 1200);
+    });
+}
+</script>
+</head>
+
+<body>
+<h3>Asset Codes</h3>
+
+{% for code in assets %}
+<div class="row">
+    <div>{{ code }}</div>
+    <button onclick="copyText('{{ code }}', this)">Copy</button>
+</div>
+{% endfor %}
 </body>
 </html>
 """
 
 @app.route("/")
-def home():
-    return render_template_string(HTML, assets=asset_codes)
+def audit():
+    return render_template_string(QR_HTML, assets=asset_codes)
+
+@app.route("/mobile")
+def mobile():
+    return render_template_string(MOBILE_HTML, assets=asset_codes)
 
 @app.route("/generate_qr/<code>")
 def generate_qr(code):
     img = qrcode.make(code)
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
-    return jsonify({"qr": qr_base64})
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return jsonify({
+        "qr": base64.b64encode(buf.getvalue()).decode()
+    })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
